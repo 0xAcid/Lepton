@@ -8,6 +8,9 @@
 #include "pub_tool_machine.h"
 #include <stdio.h>
 #include <stdlib.h>
+/* This is not really clean, but it's getting messy linking header files with Valgrind */
+#include "LT_Basics.c"
+#include "LT_LL.c"
 
 #define FUNCTIONS 4096
 #define NAME_LENGTH 256
@@ -19,73 +22,10 @@
 
  
 
-HChar FunctionList[FUNCTIONS][NAME_LENGTH] = {0};
-/*
-// Before using Linked List We neeed to figure out how to use malloc properly.
-// There is probably another implementation of calloc by Valgrind so it does not mess with the original program heap
+char FunctionList[FUNCTIONS][NAME_LENGTH];
 
-typedef struct FunctionCall_S{
-	char * FunctionName;
-	struct FunctionCall_S *BLink;
-	struct FunctionCall_S *FLink;
-} FunctionCall;
-FunctionCall *CreateFC(FunctionCall *Tail, char * FunctionName);
-void UpdateTail(FunctionCall * Tail);
  
 
-
-FunctionCall *CreateFC(FunctionCall *Tail, char * FunctionName)
-{
-		FunctionCall * New = NULL;
-		New = (FunctionCall*) malloc (1);
-		if (!New)
-		{
-			return NULL;
-		}
-		New->FunctionName = NULL;
-		New->FLink = NULL;
-		New->BLink = Tail;
-		if (Tail)
-		{
-			Tail->FLink = New;
-		}
-		return New;
-}
-
-void UpdateTail(FunctionCall * Tail)
-{
-	Tail = Tail->FLink;
-	return;
-}
- */
- 
-// Basic stuff to determine usage of malloc and free
-static ULong Malloc_C = 0;
-static ULong Free_C = 0; 
-static ULong Test_C = 0;
-
-// static void Test(void)
-// {
-	// Test_C++;
-	// return;
-// }
-
-static void CountMalloc(void)
-{
-	Malloc_C++;
-	return;
-}
-static void CountCalloc(void)
-{
-	Malloc_C++;
-	return;
-}
-
-static void CountFree(void)
-{
-	Free_C++;
-	return;
-}
  
 static Bool Malloc_Free    = True;
 static Bool Function_Trace    = False;
@@ -127,81 +67,99 @@ static void LT_post_clo_init(void)
 
 static IRSB* LT_instrument ( VgCallbackClosure* closure, IRSB* sbIn, const VexGuestLayout* layout, const VexGuestExtents* vge, const VexArchInfo* archinfo_host, IRType gWordTy, IRType hWordTy )
 {
-	IRDirty*   di;
-	IRStmt* st;
-	Int i=0, j=0;
-	const HChar FREE[] = "free";
-	const HChar MALLOC[] = "malloc";
-	const HChar CALLOC[] = "calloc";
+	Int i;
+	static Int j =0;
+	IRDirty* di;
+	IRSB* sbOut;
 	
-	
+	//Tail = Head;
+	// FunctionCall * Temp = NULL;
+	// Temp = CreateFC(Tail, "test");
+
 	if (gWordTy != hWordTy) 
 	{
-      /* We don't currently support this case. */
-      VG_(tool_panic)	("host/guest word size mismatch");
-   }
-   
-   
+		VG_(tool_panic)("host/guest word size mismatch");
+	}
+	
+	sbOut = deepCopyIRSBExceptStmts(sbIn);
+
+	i = 0;
+	while (i < sbIn->stmts_used && sbIn->stmts[i]->tag != Ist_IMark) 
+	{
+		addStmtToIRSB( sbOut, sbIn->stmts[i] );
+		i++;
+	}
+
+
 	for (; i < sbIn->stmts_used; i++) 
 	{
-		st = sbIn->stmts[i];
-		/* If empty or No-Operation */
-		
+		IRStmt* st = sbIn->stmts[i];
 		if (!st || st->tag == Ist_NoOp)
 		{
-		  continue;
+			continue;
 		}
-		/* If potential function call */
+	
+		const HChar *fnname;
+
 		if (st->tag == Ist_IMark)
 		{
-			//CountFree();
-			const HChar *fnname;
-			if (VG_(get_fnname_if_entry)	(st->Ist.IMark.addr, &fnname))
+			
+			if (VG_(get_fnname_if_entry)(st->Ist.IMark.addr, &fnname)) 
 			{
-				if (Function_Trace)
-				{
-						VG_(strncpy)(FunctionList[j], fnname,NAME_LENGTH -1);
-				}
 				
+				di = unsafeIRDirty_0_N( 0, "CountCall", VG_(fnptr_to_fnentry)( &CountCall ), mkIRExprVec_0() );
+				addStmtToIRSB( sbOut, IRStmt_Dirty(di) );
 				if (Malloc_Free)
 				{
-					
-						if (0 == VG_(strcmp)	(FREE, fnname))
-						{
-							//CountFree();
-							di = unsafeIRDirty_0_N(  0, "CountFree",  VG_(fnptr_to_fnentry)( &CountFree ),  mkIRExprVec_0() );
-						}
-						else if (0 == VG_(strcmp)	(CALLOC,fnname))
-						{
-							//CountCalloc();
-							di = unsafeIRDirty_0_N(  0, "CountCalloc",  VG_(fnptr_to_fnentry)( &CountCalloc ),  mkIRExprVec_0() );
-						}
-						else if (0 == VG_(strcmp)	(MALLOC, fnname))
-						{
-							//CountMalloc();
-							di = unsafeIRDirty_0_N(  0, "CountMalloc",  VG_(fnptr_to_fnentry)( &CountMalloc ),  mkIRExprVec_0() );
-						}
-						else
-						{
-							continue;
-						}
+					if (0 == VG_(strcmp)(fnname, "malloc"))
+					{
+						
+						di = unsafeIRDirty_0_N( 0, "CountMalloc", VG_(fnptr_to_fnentry)( &CountMalloc ), mkIRExprVec_0() );
+						addStmtToIRSB( sbOut, IRStmt_Dirty(di) );
+					}
+					else if (0 == VG_(strcmp)(fnname, "calloc"))
+					{
+						di = unsafeIRDirty_0_N( 0, "CountCalloc", VG_(fnptr_to_fnentry)( &CountCalloc), mkIRExprVec_0() );
+						addStmtToIRSB( sbOut, IRStmt_Dirty(di) );
+					}
+					else if (0 == VG_(strcmp)(fnname, "free"))
+					{
+						di = unsafeIRDirty_0_N( 0, "CountFree", VG_(fnptr_to_fnentry)( &CountFree ), mkIRExprVec_0() );
+						addStmtToIRSB( sbOut, IRStmt_Dirty(di) );
+						
+					}
+				}
+				if (Function_Trace)
+				{
+					VG_(strcpy)(FunctionList[j], fnname);
+					j++;
 				}
 
-				
 			}
+			
+			
 		}
-	}	
-	return sbIn;
+		addStmtToIRSB( sbOut, st );
+	}
+
+
+	return sbOut;
 }
+
+
+
+
 
 
 static void LT_fini(Int exitcode)
 {
 	Int j=0, i=0;
-	VG_(umsg)("-------- Report --------\n");
+	VG_(umsg)("\n\n\n\n-------- Report --------\n\n");
+	VG_(umsg)("\t[+] Lepton detected %ld call(s)\n", Call_C);
 	if (Malloc_Free)
 	{
-		VG_(umsg)("-------- Malloc and Free usage --------\n");
+		VG_(umsg)("\n-------- Malloc and Free usage --------\n");
+		
 		if (Malloc_C == Free_C)
 		{
 			VG_(umsg)("\t[+] Lepton detected the same number of Malloc/Calloc and Free. (%ld)\n", Malloc_C);
@@ -217,31 +175,20 @@ static void LT_fini(Int exitcode)
 				VG_(umsg)("\t[-] Lepton detected more free than Malloc/Calloc.\n\t\t [*] Free ===> %ld\n\t\t [*] Malloc/Calloc ===> %ld\n", Malloc_C, Free_C);
 			}
 		}
+		
 		VG_(umsg)("----------------------------------\n");
 	}
 	
 	if (Function_Trace)
 	{
-		VG_(umsg)("-------- Functions trace --------\n");
-		// for (i=0; i < FUNCTIONS; i++)
-		// {
-			// for (j=0; j < NAME_LENGTH; j++)
-			// {
-				// if(!FunctionList[i][j])
-				// {
-					// break;
-				// }
-				// VG_(umsg)("\t [%d] 0x%x\n", i, FunctionList[i][j]);
-			// }
-		// }
-		for (j=0; j < FUNCTIONS; j++)
+		VG_(umsg)("\n-------- Functions trace --------\n");
+		for (i=0; i < FUNCTIONS; i++)
 		{
-			if (! FunctionList[j][0])
+			if (!FunctionList[i][0])
 			{
 				continue;
 			}
-			VG_(umsg)("\t [%d] %s\n",j, FunctionList[j]);
-			// VG_(umsg)("\t [%d]\n",j );
+			VG_(umsg)("\t[%d] %s\n", i, FunctionList[i]);
 		}
 		VG_(umsg)("----------------------------------\n");
 	}
@@ -258,6 +205,8 @@ static void LT_pre_clo_init(void)
 	VG_(details_avg_translation_sizeB)	( 275 );
 	VG_(basic_tool_funcs)	(LT_post_clo_init,  LT_instrument, LT_fini);
 	VG_(needs_command_line_options)(LT_Commands, LT_Usage,  LT_Debug_Usage);
+	// Head = CreateFC(NULL, "LeptonStart");
+	// Tail = Head;
 	return;
 }
 
