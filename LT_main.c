@@ -23,6 +23,8 @@
  
 
 char FunctionList[FUNCTIONS][NAME_LENGTH];
+Addr FunctionListAdd[FUNCTIONS] = {0};
+
 
  
 
@@ -71,10 +73,7 @@ static IRSB* LT_instrument ( VgCallbackClosure* closure, IRSB* sbIn, const VexGu
 	static Int j =0;
 	IRDirty* di;
 	IRSB* sbOut;
-	
-	//Tail = Head;
-	// FunctionCall * Temp = NULL;
-	// Temp = CreateFC(Tail, "test");
+	Addr iaddr = 0;
 
 	if (gWordTy != hWordTy) 
 	{
@@ -131,6 +130,7 @@ static IRSB* LT_instrument ( VgCallbackClosure* closure, IRSB* sbIn, const VexGu
 				}
 				if (Function_Trace)
 				{
+					FunctionListAdd[j] = st->Ist.IMark.addr;
 					VG_(strcpy)(FunctionList[j], fnname);
 					j++;
 				}
@@ -181,14 +181,14 @@ static void LT_fini(Int exitcode)
 	
 	if (Function_Trace)
 	{
-		VG_(umsg)("\n-------- Functions trace --------\n");
+		VG_(umsg)("\n-------- Functions trace (named calls) --------\n");
 		for (i=0; i < FUNCTIONS; i++)
 		{
 			if (!FunctionList[i][0])
 			{
 				continue;
 			}
-			VG_(umsg)("\t[%d] %s\n", i, FunctionList[i]);
+			VG_(umsg)("\t[%d] %s @ 0x%x\n", i, FunctionList[i], FunctionListAdd[i]);
 		}
 		VG_(umsg)("----------------------------------\n");
 	}
