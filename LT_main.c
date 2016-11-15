@@ -19,7 +19,9 @@
  * You can find the source code at https://github.com/Axi0m-S/Lepton
  */
  
-
+// TO CHECK
+// VG_(m_state_static)
+// vg_do_register_allocation
  
 
 char FunctionList[FUNCTIONS][NAME_LENGTH];
@@ -31,12 +33,15 @@ Addr FunctionListAdd[FUNCTIONS] = {0};
  
 static Bool Malloc_Free    = True;
 static Bool Function_Trace    = False;
+static Bool Memory_Access    = False;
+
 
  
 static Bool LT_Commands(const HChar* arg)
 {
    if VG_BOOL_CLO(arg, "--basic-mallocfree", Malloc_Free) {}
    else if VG_BOOL_CLO(arg, "--function-trace", Function_Trace) {}
+   else if VG_BOOL_CLO(arg, "--memory-access", Memory_Access) {}
 
    else
       return False;
@@ -99,7 +104,15 @@ static IRSB* LT_instrument ( VgCallbackClosure* closure, IRSB* sbIn, const VexGu
 		}
 	
 		const HChar *fnname;
-
+		if (st->tag == Ist_WrTmp || st->tag == Ist_Store || st->tag == Ist_StoreG || st->tag == Ist_LoadG)
+		{
+			if (Memory_Access)
+			{
+				di = unsafeIRDirty_0_N( 0, "CountMemory_Access", VG_(fnptr_to_fnentry)( &CountMemory_Access ), mkIRExprVec_0() );
+				addStmtToIRSB( sbOut, IRStmt_Dirty(di) );
+				// CountMemory_Access();
+			}
+		}
 		if (st->tag == Ist_IMark)
 		{
 			
@@ -112,30 +125,27 @@ static IRSB* LT_instrument ( VgCallbackClosure* closure, IRSB* sbIn, const VexGu
 				{
 					if (0 == VG_(strcmp)(fnname, "malloc"))
 					{
-						
-						di = unsafeIRDirty_0_N( 0, "CountMalloc", VG_(fnptr_to_fnentry)( &CountMalloc ), mkIRExprVec_0() );
-						addStmtToIRSB( sbOut, IRStmt_Dirty(di) );
+						CountMalloc();						
 					}
-					else if (0 == VG_(strcmp)(fnname, "calloc"))
+					else if (0 == VG_(strcmp)(fnname, "calloc") )
 					{
-						di = unsafeIRDirty_0_N( 0, "CountCalloc", VG_(fnptr_to_fnentry)( &CountCalloc), mkIRExprVec_0() );
-						addStmtToIRSB( sbOut, IRStmt_Dirty(di) );
+						CountCalloc();
 					}
-					else if (0 == VG_(strcmp)(fnname, "free"))
+					else if (0 == VG_(strcmp)(fnname, "free") )
 					{
-						di = unsafeIRDirty_0_N( 0, "CountFree", VG_(fnptr_to_fnentry)( &CountFree ), mkIRExprVec_0() );
-						addStmtToIRSB( sbOut, IRStmt_Dirty(di) );
+						CountFree();
 						
 					}
 				}
+				
 				if (Function_Trace)
 				{
 					FunctionListAdd[j] = st->Ist.IMark.addr;
-					VG_(strcpy)(FunctionList[j], fnname);
+					VG_(strcpy)(FunctionList[j], fnname); // function name < NAME_LENGTH
 					j++;
 				}
-
 			}
+			
 			
 			
 		}
@@ -176,7 +186,7 @@ static void LT_fini(Int exitcode)
 			}
 		}
 		
-		VG_(umsg)("----------------------------------\n");
+		VG_(umsg)("---------------------------------------\n");
 	}
 	
 	if (Function_Trace)
@@ -188,9 +198,19 @@ static void LT_fini(Int exitcode)
 			{
 				continue;
 			}
+			if (!VG_(strcmp)(FunctionList[i], "main"))
+			{
+				VG_(umsg)("\n\n\t\t ----- MAIN START HERE -----\n\n");
+			}
 			VG_(umsg)("\t[%d] %s @ 0x%x\n", i, FunctionList[i], FunctionListAdd[i]);
 		}
-		VG_(umsg)("----------------------------------\n");
+		VG_(umsg)("---------------------------------------\n");
+	}
+	if (Memory_Access)
+	{
+		VG_(umsg)("\n-------- Memory accesses --------\n");
+		VG_(umsg)("\t[+] Lepton detected %ld memory access\n", Memory_Access_C);
+		VG_(umsg)("---------------------------------------\n");
 	}
 	return;
 }
