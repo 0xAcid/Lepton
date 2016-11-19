@@ -6,11 +6,18 @@
 #include "pub_tool_libcbase.h"
 #include "pub_tool_options.h"
 #include "pub_tool_machine.h"
+
+
+
+
+
+
+
+
 #include <stdio.h>
 #include <stdlib.h>
 /* This is not really clean, but it's getting messy linking header files with Valgrind */
 #include "LT_Basics.c"
-#include "LT_LL.c"
 
 #define FUNCTIONS 4096
 #define NAME_LENGTH 256
@@ -63,7 +70,7 @@ static void LT_Debug_Usage(void)
    );
 }
  
- 
+
  
  
  
@@ -72,93 +79,154 @@ static void LT_post_clo_init(void)
 	return;
 }
 
-static IRSB* LT_instrument ( VgCallbackClosure* closure, IRSB* sbIn, const VexGuestLayout* layout, const VexGuestExtents* vge, const VexArchInfo* archinfo_host, IRType gWordTy, IRType hWordTy )
+
+
+/*
+ * This is the instrumentation function and is the core of the program
+ */
+ 
+ 
+ 
+ 
+ /* TODO :
+ * Add registers entries at function call
+ * Modify printf into write file
+ * Setup pretty printer HTML
+ * Modify reporting
+ */
+static IRSB* LT_instrument ( VgCallbackClosure* closure, IRSB* SuperBlockIn, const VexGuestLayout* layout, const VexGuestExtents* vge, const VexArchInfo* archinfo_host, IRType gWordTy, IRType hWordTy )
 {
 	Int i;
-	static Int j =0;
+	IRSB *SuperBlockOut;
 	IRDirty* di;
-	IRSB* sbOut;
-	Addr iaddr = 0;
-
+	IRExpr**   argv;
+	
+	/* Init SuperBlockOut */
+	SuperBlockOut = deepCopyIRSBExceptStmts(SuperBlockIn);
+	
+	/* Default mesure if something is wrong with the loaded program */
 	if (gWordTy != hWordTy) 
 	{
 		VG_(tool_panic)("host/guest word size mismatch");
 	}
 	
-	sbOut = deepCopyIRSBExceptStmts(sbIn);
-
-	i = 0;
-	while (i < sbIn->stmts_used && sbIn->stmts[i]->tag != Ist_IMark) 
+	
+	
+	while (i < SuperBlockIn->stmts_used && SuperBlockIn->stmts[i]->tag != Ist_IMark) 
 	{
-		addStmtToIRSB( sbOut, sbIn->stmts[i] );
+		addStmtToIRSB( SuperBlockOut, SuperBlockIn->stmts[i] );
 		i++;
 	}
-
-
-	for (; i < sbIn->stmts_used; i++) 
+	
+	
+	
+	
+	/* Iterate statements */
+	for (; i < SuperBlockIn->stmts_used; i++)
 	{
-		IRStmt* st = sbIn->stmts[i];
-		if (!st || st->tag == Ist_NoOp)
+		IRStmt * Statement = SuperBlockIn->stmts[i];
+		IRExpr* Data;
+		/* If no statement */
+		if (!Statement)
 		{
 			continue;
 		}
-	
-		const HChar *fnname;
-		if (st->tag == Ist_WrTmp || st->tag == Ist_Store || st->tag == Ist_StoreG || st->tag == Ist_LoadG)
-		{
-			if (Memory_Access)
+		
+			/* 
+			* This switch case is where all the instrumentation is going on.
+			* We can use callback function based on the instruction type to define what we need to do.
+			*/
+			switch (Statement->tag)
 			{
-				di = unsafeIRDirty_0_N( 0, "CountMemory_Access", VG_(fnptr_to_fnentry)( &CountMemory_Access ), mkIRExprVec_0() );
-				addStmtToIRSB( sbOut, IRStmt_Dirty(di) );
-				// CountMemory_Access();
-			}
-		}
-		if (st->tag == Ist_IMark)
-		{
-			
-			if (VG_(get_fnname_if_entry)(st->Ist.IMark.addr, &fnname)) 
-			{
+				const HChar *fnname;
+				/* No operation, continue to next iteration */
+				case Ist_NoOp:
 				
-				di = unsafeIRDirty_0_N( 0, "CountCall", VG_(fnptr_to_fnentry)( &CountCall ), mkIRExprVec_0() );
-				addStmtToIRSB( sbOut, IRStmt_Dirty(di) );
-				if (Malloc_Free)
-				{
-					if (0 == VG_(strcmp)(fnname, "malloc"))
-					{
-						CountMalloc();						
-					}
-					else if (0 == VG_(strcmp)(fnname, "calloc") )
-					{
-						CountCalloc();
-					}
-					else if (0 == VG_(strcmp)(fnname, "free") )
-					{
-						CountFree();
-						
-					}
-				}
+					continue; 
 				
-				if (Function_Trace)
-				{
-					FunctionListAdd[j] = st->Ist.IMark.addr;
-					VG_(strcpy)(FunctionList[j], fnname); // function name < NAME_LENGTH
-					j++;
-				}
+				
+				/*
+				 * Ist_Store : "Write a value to memory"
+				 * This is simply a store statement that we will log
+				 */
+				case Ist_Store:
+					argv = mkIRExprVec_2( Statement->Ist.Store.addr, mkIRExpr_HWord(sizeofIRType(typeOfIRExpr(SuperBlockIn->tyenv, Statement->Ist.Store.data))) );
+					di   = unsafeIRDirty_0_N( 2,  StoreInstruction, VG_(fnptr_to_fnentry)(StoreInstruction ), argv );
+					addStmtToIRSB( SuperBlockOut, IRStmt_Dirty(di) );
+					// argv = mkIRExprVec_2( Statement->Ist.Store.addr, 0 );
+					// di = unsafeIRDirty_0_N( 2, "StoreInstruction", VG_(fnptr_to_fnentry)( &StoreInstruction),  argv);
+					// addStmtToIRSB( SuperBlockOut, IRStmt_Dirty(di) );
+					break;
+				
+				
+				/*
+				 * Ist_Tmp : Seems to be the only statement where we can find loads. There is also LoadG but we never had something correct with it.
+				 * See : "IISWC-2006 - Building Workload Characterization Tool with Valgrind"
+				 * This is simply a load statement that we will log
+				 */
+				case Ist_WrTmp:
+					Data = Statement->Ist.WrTmp.data;
+					if (Data->tag == Iex_Load)
+					{
+						argv = mkIRExprVec_2( Data->Iex.Load.addr, mkIRExpr_HWord(sizeofIRType(Data->Iex.Load.ty)) );
+						di   = unsafeIRDirty_0_N( 2,  LoadInstruction, VG_(fnptr_to_fnentry)(LoadInstruction ), argv );
+						addStmtToIRSB( SuperBlockOut, IRStmt_Dirty(di) );
+					}
+					
+					break;
+				
+
+
+				/*
+				* Ist_IMark : "Marks the start of the statements that represent a single machine instruction"
+				* We are using IMark to determine whether we can get a function name or not.
+				* Based on this we can do a trace of called function.
+				* This part may need to be improved with unnammed calls.
+				*
+				* We also use it to check for calloc/malloc and free, in order to have an idea if the program is well written or if we could find use-after-free etc.
+				*/
+				
+				case Ist_IMark:
+				
+					if (VG_(get_fnname_if_entry)(Statement->Ist.IMark.addr, &fnname)) 
+					{
+						CountCall();
+						if (Malloc_Free)
+						{
+							if (0 == VG_(strcmp)(fnname, "malloc"))
+							{
+								CountMalloc();						
+							}
+							else if (0 == VG_(strcmp)(fnname, "calloc") )
+							{
+								CountCalloc();
+							}
+							else if (0 == VG_(strcmp)(fnname, "free") )
+							{
+								CountFree();
+							}
+						}
+						if (Function_Trace)
+						{
+							NewFunction(Statement->Ist.IMark.addr, fnname);
+						}
+					}
+				
+				break;
+				
+					default:
+				break;
 			}
-			
-			
-			
-		}
-		addStmtToIRSB( sbOut, st );
+		
+		
+		
+		addStmtToIRSB(SuperBlockOut, Statement);
+
 	}
+	
 
-
-	return sbOut;
+	return SuperBlockOut;
 }
-
-
-
-
 
 
 static void LT_fini(Int exitcode)
