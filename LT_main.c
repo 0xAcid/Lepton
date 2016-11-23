@@ -6,7 +6,7 @@
 #include "pub_tool_libcbase.h"
 #include "pub_tool_options.h"
 #include "pub_tool_machine.h"
-
+#include "libvex_guest_amd64.h"
 
 
 
@@ -39,8 +39,8 @@ Addr FunctionListAdd[FUNCTIONS] = {0};
 
  
 static Bool Malloc_Free    = True;
-static Bool Function_Trace    = False;
-static Bool Memory_Access    = False;
+static Bool Function_Trace    = True;
+static Bool Memory_Access    = True;
 
 
  
@@ -126,6 +126,7 @@ static IRSB* LT_instrument ( VgCallbackClosure* closure, IRSB* SuperBlockIn, con
 	{
 		IRStmt * Statement = SuperBlockIn->stmts[i];
 		IRExpr* Data;
+		VexGuestAMD64State REG;
 		/* If no statement */
 		if (!Statement)
 		{
@@ -153,9 +154,6 @@ static IRSB* LT_instrument ( VgCallbackClosure* closure, IRSB* SuperBlockIn, con
 					argv = mkIRExprVec_2( Statement->Ist.Store.addr, mkIRExpr_HWord(sizeofIRType(typeOfIRExpr(SuperBlockIn->tyenv, Statement->Ist.Store.data))) );
 					di   = unsafeIRDirty_0_N( 2,  StoreInstruction, VG_(fnptr_to_fnentry)(StoreInstruction ), argv );
 					addStmtToIRSB( SuperBlockOut, IRStmt_Dirty(di) );
-					// argv = mkIRExprVec_2( Statement->Ist.Store.addr, 0 );
-					// di = unsafeIRDirty_0_N( 2, "StoreInstruction", VG_(fnptr_to_fnentry)( &StoreInstruction),  argv);
-					// addStmtToIRSB( SuperBlockOut, IRStmt_Dirty(di) );
 					break;
 				
 				
@@ -208,7 +206,10 @@ static IRSB* LT_instrument ( VgCallbackClosure* closure, IRSB* SuperBlockIn, con
 						}
 						if (Function_Trace)
 						{
-							NewFunction(Statement->Ist.IMark.addr, fnname);
+							// LibVEX_GuestAMD64_initialise(&REG);
+							// PrintREG(REG);
+							// printX()
+							NewFunction(Statement->Ist.IMark.addr, fnname, layout);
 						}
 					}
 				
@@ -232,34 +233,35 @@ static IRSB* LT_instrument ( VgCallbackClosure* closure, IRSB* SuperBlockIn, con
 static void LT_fini(Int exitcode)
 {
 	Int j=0, i=0;
-	VG_(umsg)("\n\n\n\n-------- Report --------\n\n");
-	VG_(umsg)("\t[+] Lepton detected %ld call(s)\n", Call_C);
+	End();
+	VG_(umsg)("\r//\t\t\r//\t\t\r//\t\t\r//\t\t-------- Report --------\r//\t\t\r//\t\t");
+	VG_(umsg)("\t[+] Lepton detected %ld call(s)\r//\t\t", Call_C);
 	if (Malloc_Free)
 	{
-		VG_(umsg)("\n-------- Malloc and Free usage --------\n");
+		VG_(umsg)("\r//\t\t-------- Malloc and Free usage --------\r//\t\t");
 		
 		if (Malloc_C == Free_C)
 		{
-			VG_(umsg)("\t[+] Lepton detected the same number of Malloc/Calloc and Free. (%ld)\n", Malloc_C);
+			VG_(umsg)("\t[+] Lepton detected the same number of Malloc/Calloc and Free. (%ld)\r//\t\t", Malloc_C);
 		}
 		else
 		{
 			if (Malloc_C > Free_C)
 			{
-				VG_(umsg)("\t[-] Lepton detected more Malloc/Calloc than free.\n\t\t [*] Malloc/Calloc ===> %ld\n\t\t [*] Free ===> %ld\n", Malloc_C, Free_C);
+				VG_(umsg)("\t[-] Lepton detected more Malloc/Calloc than free.\r//\t\t\t\t [*] Malloc/Calloc ===> %ld\r//\t\t\t\t [*] Free ===> %ld\r//\t\t", Malloc_C, Free_C);
 			}
 			else
 			{
-				VG_(umsg)("\t[-] Lepton detected more free than Malloc/Calloc.\n\t\t [*] Free ===> %ld\n\t\t [*] Malloc/Calloc ===> %ld\n", Malloc_C, Free_C);
+				VG_(umsg)("\t[-] Lepton detected more free than Malloc/Calloc.\r//\t\t\t\t [*] Free ===> %ld\r//\t\t\t\t [*] Malloc/Calloc ===> %ld\r//\t\t", Malloc_C, Free_C);
 			}
 		}
 		
-		VG_(umsg)("---------------------------------------\n");
+		VG_(umsg)("---------------------------------------\r//\t\t");
 	}
 	
 	if (Function_Trace)
 	{
-		VG_(umsg)("\n-------- Functions trace (named calls) --------\n");
+		VG_(umsg)("\r//\t\t-------- Functions trace (named calls) --------\r//\t\t");
 		for (i=0; i < FUNCTIONS; i++)
 		{
 			if (!FunctionList[i][0])
@@ -268,17 +270,17 @@ static void LT_fini(Int exitcode)
 			}
 			if (!VG_(strcmp)(FunctionList[i], "main"))
 			{
-				VG_(umsg)("\n\n\t\t ----- MAIN START HERE -----\n\n");
+				VG_(umsg)("\r//\t\t\r//\t\t\t\t ----- MAIN START HERE -----\r//\t\t\r//\t\t");
 			}
-			VG_(umsg)("\t[%d] %s @ 0x%x\n", i, FunctionList[i], FunctionListAdd[i]);
+			VG_(umsg)("\t[%d] %s @ 0x%x\r//\t\t", i, FunctionList[i], FunctionListAdd[i]);
 		}
-		VG_(umsg)("---------------------------------------\n");
+		VG_(umsg)("---------------------------------------\r//\t\t");
 	}
 	if (Memory_Access)
 	{
-		VG_(umsg)("\n-------- Memory accesses --------\n");
-		VG_(umsg)("\t[+] Lepton detected %ld memory access\n", Memory_Access_C);
-		VG_(umsg)("---------------------------------------\n");
+		VG_(umsg)("\r//\t\t-------- Memory accesses --------\r//\t\t");
+		VG_(umsg)("\t[+] Lepton detected %ld memory access\r//\t\t", Memory_Access_C);
+		VG_(umsg)("---------------------------------------\r//\t\t");
 	}
 	return;
 }
@@ -293,8 +295,6 @@ static void LT_pre_clo_init(void)
 	VG_(details_avg_translation_sizeB)	( 275 );
 	VG_(basic_tool_funcs)	(LT_post_clo_init,  LT_instrument, LT_fini);
 	VG_(needs_command_line_options)(LT_Commands, LT_Usage,  LT_Debug_Usage);
-	// Head = CreateFC(NULL, "LeptonStart");
-	// Tail = Head;
 	return;
 }
 
