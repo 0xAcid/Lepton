@@ -45,8 +45,8 @@ static Bool Memory_Access    = True;
 static Bool LT_Commands(const HChar* arg)
 {
    if VG_BOOL_CLO(arg, "--basic-mallocfree", Malloc_Free) {}
-   else if VG_BOOL_CLO(arg, "--function-trace", Function_Trace) {}
-   else if VG_BOOL_CLO(arg, "--memory-access", Memory_Access) {}
+   else if VG_BOOL_CLO(arg, "--function-trace", Function_Trace) {} /* Not used anymore, used as default */
+   else if VG_BOOL_CLO(arg, "--memory-access", Memory_Access) {} /* Not used anymore, used as default */
 
    else
       return False;
@@ -57,7 +57,6 @@ static void LT_Usage(void)
 {  
    VG_(printf)(
 "    --basic-mallocfree=no|yes     count free and malloc/calloc [yes]\n"
-"    --function-trace=no|yes  trace function calls [no]\n"
    );
 }
 
@@ -82,16 +81,6 @@ static void LT_post_clo_init(void)
 /*
  * This is the instrumentation function and is the core of the program
  */
- 
- 
- 
- 
- /* TODO :
- * Add registers entries at function call
- * Modify printf into write file
- * Setup pretty printer HTML
- * Modify reporting
- */
 static IRSB* LT_instrument ( VgCallbackClosure* closure, IRSB* SuperBlockIn, const VexGuestLayout* layout, const VexGuestExtents* vge, const VexArchInfo* archinfo_host, IRType gWordTy, IRType hWordTy )
 {
 	Int i;
@@ -99,9 +88,7 @@ static IRSB* LT_instrument ( VgCallbackClosure* closure, IRSB* SuperBlockIn, con
 	IRDirty* di;
 	IRExpr**   argv;
 	IRTemp RAX, RBX, RCX, RDX, RSP, RBP, RIP;
-	static Int Inception =0;
 	
-	Inception++;
 	/* Init SuperBlockOut */
 	SuperBlockOut = deepCopyIRSBExceptStmts(SuperBlockIn);
 	
@@ -210,11 +197,6 @@ static IRSB* LT_instrument ( VgCallbackClosure* closure, IRSB* SuperBlockIn, con
 							VG_(strncpy)(FName, fnname,NAME_LENGTH -1);
 							FAddr = Statement->Ist.IMark.addr;
 							EnableWrite = True;
-							// VG_(printf)("[INCEPTION : %d] - %s\n", CallCounter, fnname);
-							// char *strcpy(char *dest, const char *src)
-							// LibVEX_GuestAMD64_initialise(&REG);
-							// PrintREG(REG);
-							// printX()
 							
 							  // /*  16 */ ULong  guest_RAX;
 							  // /*  24 */ ULong  guest_RCX;
@@ -252,51 +234,21 @@ static IRSB* LT_instrument ( VgCallbackClosure* closure, IRSB* SuperBlockIn, con
 							addStmtToIRSB (SuperBlockOut, IRStmt_WrTmp(RIP, IRExpr_Get( 184, Ity_I64 )) );
 							
 							
-							
+							/* Call to FNAME */
 							di   = unsafeIRDirty_0_N( 0,  FNAME, VG_(fnptr_to_fnentry)(FNAME ), mkIRExprVec_0() );
 							addStmtToIRSB( SuperBlockOut, IRStmt_Dirty(di) );
 							
-							// NewFunction(Statement->Ist.IMark.addr, fnname, RAX, RBX, RCX, RDX, RBP, RSP, SuperBlockOut);
-							
+							/* Call to printABC */
 							argv = mkIRExprVec_3(  IRExpr_RdTmp(RAX),  IRExpr_RdTmp(RBX), IRExpr_RdTmp(RCX)   );
 							di   = unsafeIRDirty_0_N( 3,  printABC, VG_(fnptr_to_fnentry)(printABC ), argv );
 							addStmtToIRSB( SuperBlockOut, IRStmt_Dirty(di) );
 							
-							
+							/* Call to printDBPSP */
 							argv = mkIRExprVec_3(  IRExpr_RdTmp(RDX),  IRExpr_RdTmp(RBP), IRExpr_RdTmp(RSP)   );
 							di   = unsafeIRDirty_0_N( 3,  printDBPSP, VG_(fnptr_to_fnentry)(printDBPSP ), argv );
-							addStmtToIRSB( SuperBlockOut, IRStmt_Dirty(di) );
-							
-							// printMemoryAccess();
-							
-							// argv = mkIRExprVec_0(   );
-												
-							
-							// argv = mkIRExprVec_1(  fnname   );
-							// di   = unsafeIRDirty_0_N( 1,  FNAME, VG_(fnptr_to_fnentry)(FNAME ), argv );
-							// addStmtToIRSB( SuperBlockOut, IRStmt_Dirty(di) );
-							// FNAME(fnname);
-							
-							
-							
+							addStmtToIRSB( SuperBlockOut, IRStmt_Dirty(di) );	
 						}
-						
-						
-						
-						
-						// printX(argv);
-						
-						
-						
-						
-						// printX(IRExpr_Get( 0, Ity_I64 ));
-						// printX(IRExpr_Get( 184, gWordTy ), Statement->Ist.IMark.addr);
-						
-						// argv = mkIRExprVec_1( IRExpr_Get( 184, 0 ) );
-						// di = unsafeIRDirty_0_N( 1, printX,
-                              // VG_(fnptr_to_fnentry)( printX), 
-                              // argv);
-						// addStmtToIRSB( SuperBlockOut, IRStmt_Dirty(di) );
+
 					}
 				
 				break;
@@ -319,7 +271,10 @@ static IRSB* LT_instrument ( VgCallbackClosure* closure, IRSB* SuperBlockIn, con
 static void LT_fini(Int exitcode)
 {
 	Int j=0, i=0;
+	/* JSON formatting */
 	End();
+	
+	/* Reporting stuff */
 	VG_(umsg)("\r//\t\t\r//\t\t\r//\t\t\r//\t\t-------- Report --------\r//\t\t\r//\t\t");
 	VG_(umsg)("\t[+] Lepton detected %ld call(s)\r//\t\t", Call_C);
 	if (Malloc_Free)
@@ -344,30 +299,7 @@ static void LT_fini(Int exitcode)
 		
 		VG_(umsg)("---------------------------------------\r//\t\t");
 	}
-	
-	if (Function_Trace)
-	{
-		VG_(umsg)("\r//\t\t-------- Functions trace (named calls) --------\r//\t\t");
-		for (i=0; i < FUNCTIONS; i++)
-		{
-			if (!FunctionList[i][0])
-			{
-				continue;
-			}
-			if (!VG_(strcmp)(FunctionList[i], "main"))
-			{
-				VG_(umsg)("\r//\t\t\r//\t\t\t\t ----- MAIN START HERE -----\r//\t\t\r//\t\t");
-			}
-			VG_(umsg)("\t[%d] %s @ 0x%x\r//\t\t", i, FunctionList[i], FunctionListAdd[i]);
-		}
-		VG_(umsg)("---------------------------------------\r//\t\t");
-	}
-	// if (Memory_Access)
-	// {
-		// VG_(umsg)("\r//\t\t-------- Memory accesses --------\r//\t\t");
-		// VG_(umsg)("\t[+] Lepton detected %ld memory access\r//\t\t", Memory_Access_C);
-		// VG_(umsg)("---------------------------------------\r//\t\t");
-	// }
+
 	return;
 }
 
