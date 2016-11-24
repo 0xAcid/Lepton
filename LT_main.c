@@ -6,7 +6,6 @@
 #include "pub_tool_libcbase.h"
 #include "pub_tool_options.h"
 #include "pub_tool_machine.h"
-#include "libvex_guest_amd64.h"
 
 
 
@@ -19,8 +18,9 @@
 /* This is not really clean, but it's getting messy linking header files with Valgrind */
 #include "LT_Basics.c"
 
-#define FUNCTIONS 4096
-#define NAME_LENGTH 256
+
+
+
 /* LEPTON - Ax.
  * Lepton is a simple Valgrind tool based on the following tutorial : http://www.valgrind.org/docs/manual/writing-tools.html#writing-tools.writingcode
  * You can find the source code at https://github.com/Axi0m-S/Lepton
@@ -31,8 +31,7 @@
 // vg_do_register_allocation
  
 
-char FunctionList[FUNCTIONS][NAME_LENGTH];
-Addr FunctionListAdd[FUNCTIONS] = {0};
+
 
 
  
@@ -41,7 +40,6 @@ Addr FunctionListAdd[FUNCTIONS] = {0};
 static Bool Malloc_Free    = True;
 static Bool Function_Trace    = True;
 static Bool Memory_Access    = True;
-
 
  
 static Bool LT_Commands(const HChar* arg)
@@ -100,7 +98,10 @@ static IRSB* LT_instrument ( VgCallbackClosure* closure, IRSB* SuperBlockIn, con
 	IRSB *SuperBlockOut;
 	IRDirty* di;
 	IRExpr**   argv;
+	IRTemp RAX, RBX, RCX, RDX, RSP, RBP, RIP;
+	static Int Inception =0;
 	
+	Inception++;
 	/* Init SuperBlockOut */
 	SuperBlockOut = deepCopyIRSBExceptStmts(SuperBlockIn);
 	
@@ -126,7 +127,6 @@ static IRSB* LT_instrument ( VgCallbackClosure* closure, IRSB* SuperBlockIn, con
 	{
 		IRStmt * Statement = SuperBlockIn->stmts[i];
 		IRExpr* Data;
-		VexGuestAMD64State REG;
 		/* If no statement */
 		if (!Statement)
 		{
@@ -139,7 +139,7 @@ static IRSB* LT_instrument ( VgCallbackClosure* closure, IRSB* SuperBlockIn, con
 			*/
 			switch (Statement->tag)
 			{
-				const HChar *fnname;
+				HChar *fnname;
 				/* No operation, continue to next iteration */
 				case Ist_NoOp:
 				
@@ -203,14 +203,100 @@ static IRSB* LT_instrument ( VgCallbackClosure* closure, IRSB* SuperBlockIn, con
 							{
 								CountFree();
 							}
-						}
+						}						
 						if (Function_Trace)
 						{
+							
+							VG_(strncpy)(FName, fnname,NAME_LENGTH -1);
+							FAddr = Statement->Ist.IMark.addr;
+							EnableWrite = True;
+							// VG_(printf)("[INCEPTION : %d] - %s\n", CallCounter, fnname);
+							// char *strcpy(char *dest, const char *src)
 							// LibVEX_GuestAMD64_initialise(&REG);
 							// PrintREG(REG);
 							// printX()
-							NewFunction(Statement->Ist.IMark.addr, fnname, layout);
+							
+							  // /*  16 */ ULong  guest_RAX;
+							  // /*  24 */ ULong  guest_RCX;
+							  // /*  32 */ ULong  guest_RDX;
+							  // /*  40 */ ULong  guest_RBX;
+							  // /*  48 */ ULong  guest_RSP;
+							  // /*  56 */ ULong  guest_RBP;
+							  // /*  64 */ ULong  guest_RSI;
+							  // /*  72 */ ULong  guest_RDI;
+							  
+							RSP = newIRTemp(SuperBlockOut->tyenv, Ity_I64);
+							addStmtToIRSB (SuperBlockOut, IRStmt_WrTmp(RSP, IRExpr_Get( 48, Ity_I64 )) );
+							
+							
+							RBP = newIRTemp(SuperBlockOut->tyenv, Ity_I64);
+							addStmtToIRSB (SuperBlockOut, IRStmt_WrTmp(RBP, IRExpr_Get( 56, Ity_I64 )) );
+							
+							
+							RAX = newIRTemp(SuperBlockOut->tyenv, Ity_I64);
+							addStmtToIRSB (SuperBlockOut, IRStmt_WrTmp(RAX, IRExpr_Get( 16, Ity_I64 )) );
+							
+							
+							RBX = newIRTemp(SuperBlockOut->tyenv, Ity_I64);
+							addStmtToIRSB (SuperBlockOut, IRStmt_WrTmp(RBX, IRExpr_Get( 40, Ity_I64 )) );
+							
+							
+							RCX = newIRTemp(SuperBlockOut->tyenv, Ity_I64);
+							addStmtToIRSB (SuperBlockOut, IRStmt_WrTmp(RCX, IRExpr_Get( 24, Ity_I64 )) );
+							
+							
+							RDX = newIRTemp(SuperBlockOut->tyenv, Ity_I64);
+							addStmtToIRSB (SuperBlockOut, IRStmt_WrTmp(RDX, IRExpr_Get( 32, Ity_I64 )) );
+							
+							RIP = newIRTemp(SuperBlockOut->tyenv, Ity_I64);
+							addStmtToIRSB (SuperBlockOut, IRStmt_WrTmp(RIP, IRExpr_Get( 184, Ity_I64 )) );
+							
+							
+							
+							di   = unsafeIRDirty_0_N( 0,  FNAME, VG_(fnptr_to_fnentry)(FNAME ), mkIRExprVec_0() );
+							addStmtToIRSB( SuperBlockOut, IRStmt_Dirty(di) );
+							
+							// NewFunction(Statement->Ist.IMark.addr, fnname, RAX, RBX, RCX, RDX, RBP, RSP, SuperBlockOut);
+							
+							argv = mkIRExprVec_3(  IRExpr_RdTmp(RAX),  IRExpr_RdTmp(RBX), IRExpr_RdTmp(RCX)   );
+							di   = unsafeIRDirty_0_N( 3,  printABC, VG_(fnptr_to_fnentry)(printABC ), argv );
+							addStmtToIRSB( SuperBlockOut, IRStmt_Dirty(di) );
+							
+							
+							argv = mkIRExprVec_3(  IRExpr_RdTmp(RDX),  IRExpr_RdTmp(RBP), IRExpr_RdTmp(RSP)   );
+							di   = unsafeIRDirty_0_N( 3,  printDBPSP, VG_(fnptr_to_fnentry)(printDBPSP ), argv );
+							addStmtToIRSB( SuperBlockOut, IRStmt_Dirty(di) );
+							
+							// printMemoryAccess();
+							
+							// argv = mkIRExprVec_0(   );
+												
+							
+							// argv = mkIRExprVec_1(  fnname   );
+							// di   = unsafeIRDirty_0_N( 1,  FNAME, VG_(fnptr_to_fnentry)(FNAME ), argv );
+							// addStmtToIRSB( SuperBlockOut, IRStmt_Dirty(di) );
+							// FNAME(fnname);
+							
+							
+							
 						}
+						
+						
+						
+						
+						// printX(argv);
+						
+						
+						
+						
+						// printX(IRExpr_Get( 0, Ity_I64 ));
+						// printX(IRExpr_Get( 184, gWordTy ), Statement->Ist.IMark.addr);
+						
+						// argv = mkIRExprVec_1( IRExpr_Get( 184, 0 ) );
+						// di = unsafeIRDirty_0_N( 1, printX,
+                              // VG_(fnptr_to_fnentry)( printX), 
+                              // argv);
+						// addStmtToIRSB( SuperBlockOut, IRStmt_Dirty(di) );
 					}
 				
 				break;
@@ -276,12 +362,12 @@ static void LT_fini(Int exitcode)
 		}
 		VG_(umsg)("---------------------------------------\r//\t\t");
 	}
-	if (Memory_Access)
-	{
-		VG_(umsg)("\r//\t\t-------- Memory accesses --------\r//\t\t");
-		VG_(umsg)("\t[+] Lepton detected %ld memory access\r//\t\t", Memory_Access_C);
-		VG_(umsg)("---------------------------------------\r//\t\t");
-	}
+	// if (Memory_Access)
+	// {
+		// VG_(umsg)("\r//\t\t-------- Memory accesses --------\r//\t\t");
+		// VG_(umsg)("\t[+] Lepton detected %ld memory access\r//\t\t", Memory_Access_C);
+		// VG_(umsg)("---------------------------------------\r//\t\t");
+	// }
 	return;
 }
 
