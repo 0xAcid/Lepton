@@ -20,8 +20,8 @@ static void CountMalloc(void);
 static void CountCalloc(void);
 static void CountFree(void);
 static void CountMemory_Access(void);
-static void StoreInstruction(Int *addr, Int Size);
-static void LoadInstruction(Int* addr, Int Size);
+static void StoreInstruction(void *addr, Int Size);
+static void LoadInstruction(void* addr, Int Size);
 static void End(void);
 static void DisableWrite();
 static void FNAME();
@@ -79,7 +79,7 @@ static void CountFree(void)
  * Store Address
  * Store Size
  */
-static void StoreInstruction(Int* addr, Int Size)
+static void StoreInstruction(void* addr, Int Size)
 {
 	if (Init)
 	{
@@ -92,23 +92,23 @@ static void StoreInstruction(Int* addr, Int Size)
 			==27048==    at 0x401861A: memset (rtld-memset.S:33)
 			*/
 			case 1:
-				VG_(printf)("{\"Store/Load\":\"S\", \"Address\":\"%p\", \"Size\":%d,  \"Data\":\"%1x\"},", addr, Size, (unsigned char)*addr);
+				VG_(printf)("{\"Store/Load\":\"S\", \"Address\":\"%p\", \"Size\":%d,  \"Data\":\"%1x\"},", addr, Size, *(unsigned char*)addr);
 				break;
 			case 2:
-				VG_(printf)("{\"Store/Load\":\"S\", \"Address\":\"%p\", \"Size\":%d,  \"Data\":\"%2x\"},", addr, Size, (unsigned short)*addr);
+				VG_(printf)("{\"Store/Load\":\"S\", \"Address\":\"%p\", \"Size\":%d,  \"Data\":\"%2x\"},", addr, Size, *(unsigned short*)addr);
 				break;
 			case 4:
-				VG_(printf)("{\"Store/Load\":\"S\", \"Address\":\"%p\", \"Size\":%d,  \"Data\":\"%4x\"},", addr, Size, (unsigned int)*addr);
+				VG_(printf)("{\"Store/Load\":\"S\", \"Address\":\"%p\", \"Size\":%d,  \"Data\":\"%4x\"},", addr, Size, *(unsigned int*)addr);
 				break;
 			case 8:
-				VG_(printf)("{\"Store/Load\":\"S\", \"Address\":\"%p\", \"Size\":%d,  \"Data\":\"%8x\"},", addr, Size, (unsigned long int)*addr);
+				VG_(printf)("{\"Store/Load\":\"S\", \"Address\":\"%p\", \"Size\":%d,  \"Data\":\"%8x\"},", addr, Size, *(unsigned long int*)addr);
 				break;
 			case 16:
-				VG_(printf)("{\"Store/Load\":\"S\", \"Address\":\"%p\", \"Size\":%d,  \"Data\":\"%8llx%8llx\"},", addr, Size, (unsigned long long int)*(addr+8), (unsigned long long int)*addr);
+				VG_(printf)("{\"Store/Load\":\"S\", \"Address\":\"%p\", \"Size\":%d,  \"Data\":\"%8llx%8llx\"},", addr, Size, ((unsigned long long int*)addr)[0], ((unsigned long long int*)addr)[1]);
 				break;
 			/* A size we cannot handle, never encountered it once but just in case */
 			default:
-				VG_(printf)("{\"Store/Load\":\"S\", \"Address\":\"%p\", \"Size\":%d,  \"Data\":\"ERROR\"},", addr, Size, (unsigned char)*addr);
+				VG_(printf)("{\"Store/Load\":\"S\", \"Address\":\"%p\", \"Size\":%d,  \"Data\":\"ERROR\"},", addr, Size, *(unsigned char*)addr);
 				break;
 		}
 
@@ -121,7 +121,7 @@ static void StoreInstruction(Int* addr, Int Size)
  * Load Address
  * Load Size
  */
-static void LoadInstruction(Int* addr, Int Size)
+static void LoadInstruction(void* addr, Int Size)
 {
 	if (Init)
 	{
@@ -134,24 +134,24 @@ static void LoadInstruction(Int* addr, Int Size)
 		switch (Size)
 		{
 			case 1:
-				VG_(printf)("{\"Store/Load\":\"L\", \"Address\":\"%p\", \"Size\":%d,  \"Data\":\"%1x\"},", addr, Size, (unsigned char)*addr);
+				VG_(printf)("{\"Store/Load\":\"L\", \"Address\":\"%p\", \"Size\":%d,  \"Data\":\"%1x\"},", addr, Size, *(unsigned char*)addr);
 				break;
 			case 2:
-				VG_(printf)("{\"Store/Load\":\"L\", \"Address\":\"%p\", \"Size\":%d,  \"Data\":\"%2x\"},", addr, Size, (unsigned short)*addr);
+				VG_(printf)("{\"Store/Load\":\"L\", \"Address\":\"%p\", \"Size\":%d,  \"Data\":\"%2x\"},", addr, Size, *(unsigned short*)addr);
 				break;
 			case 4:
-				VG_(printf)("{\"Store/Load\":\"L\", \"Address\":\"%p\", \"Size\":%d,  \"Data\":\"%4x\"},", addr, Size, (unsigned int)*addr);
+				VG_(printf)("{\"Store/Load\":\"L\", \"Address\":\"%p\", \"Size\":%d,  \"Data\":\"%4x\"},", addr, Size, *(unsigned int*)addr);
 				break;
 			case 8:
-				VG_(printf)("{\"Store/Load\":\"L\", \"Address\":\"%p\", \"Size\":%d,  \"Data\":\"%8x\"},", addr, Size, (unsigned long int)*addr);
+				VG_(printf)("{\"Store/Load\":\"L\", \"Address\":\"%p\", \"Size\":%d,  \"Data\":\"%8x\"},", addr, Size, *(unsigned long int*)addr);
 				break;
 			case 16:
-				VG_(printf)("{\"Store/Load\":\"L\", \"Address\":\"%p\", \"Size\":%d,  \"Data\":\"%8llx%8llx\"},", addr, Size, (unsigned long long int)*(addr+8), (unsigned long long int)*addr);
+				VG_(printf)("{\"Store/Load\":\"L\", \"Address\":\"%p\", \"Size\":%d,  \"Data\":\"%8llx%8llx\"},", addr, Size, ((unsigned long long int*)addr)[0], ((unsigned long long int*)addr)[1]);
 				break;
 				
 			/* A size we cannot handle, never encountered it once but just in case */
 			default:
-				VG_(printf)("{\"Store/Load\":\"L\", \"Address\":\"%p\", \"Size\":%d,  \"Data\":\"ERROR\"},", addr, Size, (unsigned char)*addr);
+				VG_(printf)("{\"Store/Load\":\"L\", \"Address\":\"%p\", \"Size\":%d,  \"Data\":\"ERROR\"},", addr, Size);
 				break;
 		}
 
