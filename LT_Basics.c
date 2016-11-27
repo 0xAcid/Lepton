@@ -20,11 +20,12 @@ static void CountMalloc(void);
 static void CountCalloc(void);
 static void CountFree(void);
 static void CountMemory_Access(void);
-static void StoreInstruction(Addr addr, Int Size);
-static void LoadInstruction(Addr addr, Int Size);
+static void StoreInstruction(Int *addr, Int Size);
+static void LoadInstruction(Int* addr, Int Size);
 static void End(void);
 static void DisableWrite();
 static void FNAME();
+
 
 static void printABC(Addr RAX, Addr RBX, Addr RCX);
 static void printDBPSP(Addr RDX, Addr RBP, Addr RSP);
@@ -78,11 +79,39 @@ static void CountFree(void)
  * Store Address
  * Store Size
  */
-static void StoreInstruction(Addr addr, Int Size)
+static void StoreInstruction(Int* addr, Int Size)
 {
 	if (Init)
 	{
-		VG_(printf)("{\"Store/Load\":\"S\", \"Address\":\"%p\", \"Size\":%d},", addr, Size);
+		switch (Size)
+		{
+			/* We need to switch depending on variable size because sometimes we are getting out of range (like reading 16 bytes when only 1 is available).
+			 * If we weren't doing the switch stuff we would have error like :
+			 ==27048== Process terminating with default action of signal 7 (SIGBUS)
+			==27048==  Non-existent physical address at address 0x4FCB000
+			==27048==    at 0x401861A: memset (rtld-memset.S:33)
+			*/
+			case 1:
+				VG_(printf)("{\"Store/Load\":\"S\", \"Address\":\"%p\", \"Size\":%d,  \"Data\":\"%1x\"},", addr, Size, (unsigned char)*addr);
+				break;
+			case 2:
+				VG_(printf)("{\"Store/Load\":\"S\", \"Address\":\"%p\", \"Size\":%d,  \"Data\":\"%2x\"},", addr, Size, (unsigned short)*addr);
+				break;
+			case 4:
+				VG_(printf)("{\"Store/Load\":\"S\", \"Address\":\"%p\", \"Size\":%d,  \"Data\":\"%4x\"},", addr, Size, (unsigned int)*addr);
+				break;
+			case 8:
+				VG_(printf)("{\"Store/Load\":\"S\", \"Address\":\"%p\", \"Size\":%d,  \"Data\":\"%8x\"},", addr, Size, (unsigned long int)*addr);
+				break;
+			case 16:
+				VG_(printf)("{\"Store/Load\":\"S\", \"Address\":\"%p\", \"Size\":%d,  \"Data\":\"%8llx%8llx\"},", addr, Size, (unsigned long long int)*(addr+8), (unsigned long long int)*addr);
+				break;
+			/* A size we cannot handle, never encountered it once but just in case */
+			default:
+				VG_(printf)("{\"Store/Load\":\"S\", \"Address\":\"%p\", \"Size\":%d,  \"Data\":\"ERROR\"},", addr, Size, (unsigned char)*addr);
+				break;
+		}
+
 	}
 }
 
@@ -92,11 +121,40 @@ static void StoreInstruction(Addr addr, Int Size)
  * Load Address
  * Load Size
  */
-static void LoadInstruction(Addr addr, Int Size)
+static void LoadInstruction(Int* addr, Int Size)
 {
 	if (Init)
 	{
-		VG_(printf)("{\"Store/Load\":\"L\", \"Address\":\"%p\", \"Size\":%d},", addr, Size);
+		/* We need to switch depending on variable size because sometimes we are getting out of range (like reading 16 bytes when only 1 is available).
+		 * If we weren't doing the switch stuff we would have error like :
+		 ==27048== Process terminating with default action of signal 7 (SIGBUS)
+		==27048==  Non-existent physical address at address 0x4FCB000
+		==27048==    at 0x401861A: memset (rtld-memset.S:33)
+		*/
+		switch (Size)
+		{
+			case 1:
+				VG_(printf)("{\"Store/Load\":\"L\", \"Address\":\"%p\", \"Size\":%d,  \"Data\":\"%1x\"},", addr, Size, (unsigned char)*addr);
+				break;
+			case 2:
+				VG_(printf)("{\"Store/Load\":\"L\", \"Address\":\"%p\", \"Size\":%d,  \"Data\":\"%2x\"},", addr, Size, (unsigned short)*addr);
+				break;
+			case 4:
+				VG_(printf)("{\"Store/Load\":\"L\", \"Address\":\"%p\", \"Size\":%d,  \"Data\":\"%4x\"},", addr, Size, (unsigned int)*addr);
+				break;
+			case 8:
+				VG_(printf)("{\"Store/Load\":\"L\", \"Address\":\"%p\", \"Size\":%d,  \"Data\":\"%8x\"},", addr, Size, (unsigned long int)*addr);
+				break;
+			case 16:
+				VG_(printf)("{\"Store/Load\":\"L\", \"Address\":\"%p\", \"Size\":%d,  \"Data\":\"%8llx%8llx\"},", addr, Size, (unsigned long long int)*(addr+8), (unsigned long long int)*addr);
+				break;
+				
+			/* A size we cannot handle, never encountered it once but just in case */
+			default:
+				VG_(printf)("{\"Store/Load\":\"L\", \"Address\":\"%p\", \"Size\":%d,  \"Data\":\"ERROR\"},", addr, Size, (unsigned char)*addr);
+				break;
+		}
+
 	}
 }
 

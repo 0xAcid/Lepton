@@ -153,13 +153,18 @@ static IRSB* LT_instrument ( VgCallbackClosure* closure, IRSB* SuperBlockIn, con
 					Data = Statement->Ist.WrTmp.data;
 					if (Data->tag == Iex_Load)
 					{
+						
+						// argv = mkIRExprVec_1( (Data->Iex.Load.addr));
+						// di   = unsafeIRDirty_0_N( 1,  Test, VG_(fnptr_to_fnentry)(Test ), argv );
+						// addStmtToIRSB( SuperBlockOut, IRStmt_Dirty(di) );
+						// Test(Data);
 						argv = mkIRExprVec_2( Data->Iex.Load.addr, mkIRExpr_HWord(sizeofIRType(Data->Iex.Load.ty)) );
 						di   = unsafeIRDirty_0_N( 2,  LoadInstruction, VG_(fnptr_to_fnentry)(LoadInstruction ), argv );
 						addStmtToIRSB( SuperBlockOut, IRStmt_Dirty(di) );
 					}
 					
-					break;
 				
+					break;
 
 
 				/*
