@@ -114,6 +114,7 @@ static IRSB* LT_instrument ( VgCallbackClosure* closure, IRSB* SuperBlockIn, con
 	{
 		IRStmt * Statement = SuperBlockIn->stmts[i];
 		IRExpr* Data;
+		addStmtToIRSB(SuperBlockOut, Statement);
 		/* If no statement */
 		if (!Statement)
 		{
@@ -264,7 +265,7 @@ static IRSB* LT_instrument ( VgCallbackClosure* closure, IRSB* SuperBlockIn, con
 		
 		
 		
-		addStmtToIRSB(SuperBlockOut, Statement);
+		
 
 	}
 	
